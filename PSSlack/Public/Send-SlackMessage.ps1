@@ -21,7 +21,12 @@ function Send-SlackMessage {
 
         Default value is the value set by Set-PSSlackConfig
 
-        If Token is set, this is ignored.
+        If Token is set, this is ignored
+
+    .PARAMETER Proxy
+        Proxy server to use
+
+        Default value is the value set by Set-PSSlackConfig
 
     .PARAMETER SlackMessage
         A SlackMessage created by New-SlackMessage
@@ -36,14 +41,14 @@ function Send-SlackMessage {
 
     .PARAMETER Username
         Set your bot's user name.
-        
+
         If using a Token, must be used in conjunction with as_user set to false, otherwise ignored
 
         See authorship details: https://api.slack.com/methods/chat.postMessage#authorship
 
     .PARAMETER IconUrl
         URL to an image to use as the icon for this message.
-        
+
         If using a Token, must be used in conjunction with as_user set to false, otherwise ignored.
 
         See authorship details: https://api.slack.com/methods/chat.postMessage#authorship
@@ -81,6 +86,12 @@ function Send-SlackMessage {
         Provide one or more hash tables created using New-SlackMessageAttachment
 
         See attachments spec https://api.slack.com/docs/attachments
+
+    .PARAMETER ForceVerbose
+        If specified, don't explicitly remove verbose output from Invoke-RestMethod
+
+        *** WARNING ***
+        This will expose your token in verbose output
 
     .EXAMPLE
         # This example shows a crudely crafted message without any attachments,
@@ -228,10 +239,14 @@ function Send-SlackMessage {
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$Token = $Script:PSSlack.Token,
-        
+
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$Uri = $Script:PSSlack.Uri,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$Proxy = $Script:PSSlack.Proxy,
 
         [PSTypeName('PSSlack.Message')]
         [parameter(ParameterSetName = 'SlackMessage',
@@ -283,12 +298,19 @@ function Send-SlackMessage {
         [parameter(ParameterSetName = 'Param',
                    ValueFromPipelineByPropertyName = $True)]
         [PSTypeName('PSSlack.MessageAttachment')]
-        [System.Collections.Hashtable[]]$Attachments
+        [System.Collections.Hashtable[]]$Attachments,
+
+        [switch]$ForceVerbose = $Script:PSSlack.ForceVerbose
     )
     begin
     {
-        Write-Debug "Send-SlackMessage Bound parameters: $($PSBoundParameters | Out-String)`nParameterSetName $($PSCmdlet.ParameterSetName)"
+        Write-Debug "Send-SlackMessage Bound parameters: $($PSBoundParameters | Remove-SensitiveData | Out-String)`nParameterSetName $($PSCmdlet.ParameterSetName)"
         $Messages = @()
+        $ProxyParam = @{}
+        if($Proxy)
+        {
+            $ProxyParam.Proxy = $Proxy
+        }
     }
     process
     {
@@ -298,7 +320,7 @@ function Send-SlackMessage {
 
             switch ($psboundparameters.keys)
             {
-                'channel'     {$body.channel = $channel }    
+                'channel'     {$body.channel = $channel }
                 'text'        {$body.text     = $text}
                 'username'    {$body.username = $username}
                 'asuser'      {$body.as_user = $AsUser}
@@ -328,11 +350,11 @@ function Send-SlackMessage {
             {
                 if($Message.attachments)
                 {
-                    $Message.attachments = ConvertTo-Json -InputObject @($Message.attachments) -Depth 4 -Compress
+                    $Message.attachments = ConvertTo-Json -InputObject @($Message.attachments) -Depth 6 -Compress
                 }
 
                 Write-Verbose "Send-SlackApi -Body $($Message | Format-List | Out-String)"
-                $response = Send-SlackApi -Method chat.postMessage -Body $Message -Token $Token
+                $response = Send-SlackApi @ProxyParam -Method chat.postMessage -Body $Message -Token $Token -ForceVerbose:$ForceVerbose
 
                 if ($response.ok)
                 {
@@ -342,10 +364,16 @@ function Send-SlackMessage {
 
                 $response
             }
-            Elseif($Uri -or $Script:PSSlack.Uri)
+            elseif($Uri -or $Script:PSSlack.Uri)
             {
-                $json = ConvertTo-Json -Depth 4 -Compress -InputObject $Message
-                Invoke-RestMethod -Method Post -Body $json -Uri $Uri
+                if(-not $ForceVerbose) {
+                    $ProxyParam.Add('Verbose', $False)
+                }
+                if($ForceVerbose) {
+                    $ProxyParam.Add('Verbose', $true)
+                }
+                $json = ConvertTo-Json -Depth 6 -Compress -InputObject $Message
+                Invoke-RestMethod @ProxyParam -Method Post -Body $json -Uri $Uri
             }
             else
             {

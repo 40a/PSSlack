@@ -15,11 +15,21 @@
     .PARAMETER Name
         One or more channel names to return.  Defaults to all.  Accepts wildcards.
 
+    .PARAMETER Types
+        Mix and match channel types by providing array of any combination of public_channel, private_channel, mpim, im
+
     .PARAMETER ExcludeArchived
         Whether to exclude archived channels. Default is to include all.
 
     .PARAMETER Raw
         If specified, we provide raw output and do not parse any responses
+
+    .PARAMETER Paging
+        If specified, and more data is available when a paging cursor is returned, continue querying Slack until
+            we have retrieved all the data available.
+
+    .PARAMETER MaxQueries
+        Limit the count of API queries to this number.  Only used if you enable -Paging
 
     .FUNCTIONALITY
         Slack
@@ -28,27 +38,63 @@
     param (
         $Token = $Script:PSSlack.Token,
         [string[]]$Name,
+        [ValidateSet('public_channel', 'private_channel', 'mpim', 'im')]
+        [string[]]$Types,
         [switch]$ExcludeArchived,
-        [switch]$Raw
+        [switch]$Raw,
+        [switch]$Paging,
+        [int]$MaxQueries
     )
     end
     {
-        Write-Verbose "$($PSBoundParameters | Out-String)"
-
-        if($ExcludeArchived)
+        Write-Verbose "$($PSBoundParameters | Remove-SensitiveData | Out-String)"
+        $body = @{
+            limit = 200
+        }
+        if ($ExcludeArchived)
         {
-            $body = @{ exclude_archived = 1 }
+            $body.Add("exclude_archived",1)
         }
         else
         {
-            $body = @{ exclude_archived = 0 }
+            $body.Add("exclude_archived",0)
         }
-        $params = @{
-            Body = $body
-            Token = $Token
-            Method = 'channels.list'
+
+        if ($Types)
+        {
+            $body.add("types",$($Types -join ","))
         }
-        $RawChannels = Send-SlackApi @params
+        else
+        {
+            $body.add("types","public_channel,private_channel")
+        }
+
+        $RawChannels = @()
+        $has_more    = $false
+        $Queries     = 0
+        do {
+            $params = @{
+                Body   = $body
+                Token  = $Token
+                Method = 'conversations.list'
+            }
+            $response = Send-SlackApi @params
+            $Queries++
+            if (-not [string]::IsNullOrEmpty($response.response_metadata.next_cursor))
+            {
+                $has_more = $true
+                $body['cursor'] = $response.response_metadata.next_cursor
+            }
+            else
+            {
+                $has_more = $false
+            }
+            $RawChannels += $response
+        } until (
+            -not $Paging -or
+            -not $has_more -or
+            ($MaxQueries -and $Queries -ge $MaxQueries)
+        )
 
         $HasWildCard = $False
         foreach($Item in $Name)
@@ -61,16 +107,16 @@
         }
 
         if($Name -and -not $HasWildCard)
-        {       
+        {
             # torn between independent queries, or filtering channels.list
             # submit a PR if this isn't performant enough or doesn't make sense.
             $Channels = $RawChannels.channels |
-                Where {$Name -Contains $_.name}
+                Where-Object {$Name -Contains $_.name}
         }
         elseif ($Name -and$HasWildCard)
         {
             $AllChannels = $RawChannels.Channels
-            
+
             # allow like operator on each channel requested in the param, avoid dupes
             $ChannelHash = [ordered]@{}
             foreach($SlackChannel in $AllChannels)

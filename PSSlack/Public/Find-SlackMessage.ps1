@@ -69,7 +69,7 @@
     )
     end
     {
-        Write-Verbose "$($PSBoundParameters | Out-String)"
+        Write-Verbose "$($PSBoundParameters | Remove-SensitiveData | Out-String)"
 
         #Initial args
         $body = @{
@@ -91,7 +91,7 @@
         #Pagination and parsing
         do
         {
-            Write-Verbose "SendSlackApi -Params $($Params | Format-List | Out-String)"
+            Write-Verbose "SendSlackApi -Params $($Params | Remove-SensitiveData | Format-List | Out-String)"
             $response = Send-SlackApi @params
             if ($response.ok)
             {
@@ -122,6 +122,7 @@
             }
 
         } until ( $ResponsePage -eq $ResponsePageCount -or
-                  $ResponsePage -eq $MaxPages)
+                  $ResponsePage -eq $MaxPages -or
+                  $ResponsePageCount -eq 0)
     }
 }

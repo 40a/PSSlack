@@ -3,22 +3,13 @@
     $Private = @( Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -ErrorAction SilentlyContinue )
     $ModuleRoot = $PSScriptRoot
 
-if(-not $IsCoreCLR)
-{
-    # Import System.Drawing Assembly
+# Import System.Drawing Assembly
     Try {
         Add-Type -Assembly System.Drawing
     }
     Catch {
         Write-Error -Message "Failed to import System.Drawing assembly: $_"
     }
-}
-else
-{
-    Write-Warning ("You are using PSSlack in with .NET Core.  Several features will not work:",
-                   "Set-PSSlackConfig cannot serialize tokens or URIs",
-                   "[System.Drawing.Color]::SOmeColor shortcut is not available" -join "`n`t")
-}
 
 #Dot source the files
 Foreach($import in @($Public + $Private))
@@ -34,20 +25,24 @@ Foreach($import in @($Public + $Private))
 }
 
 #Create / Read config
-    if(-not (Test-Path -Path "$PSScriptRoot\$env:USERNAME-$env:COMPUTERNAME-PSSlack.xml" -ErrorAction SilentlyContinue))
+    $script:_PSSlackXmlpath = Get-PSSlackConfigPath
+    if(-not (Test-Path -Path $script:_PSSlackXmlpath -ErrorAction SilentlyContinue))
     {
         Try
         {
-            Write-Warning "Did not find config file $PSScriptRoot\$env:USERNAME-$env:COMPUTERNAME-PSSlack.xml, attempting to create"
+            Write-Warning "Did not find config file $($script:_PSSlackXmlpath), attempting to create"
             [pscustomobject]@{
                 Uri = $null
                 Token = $null
                 ArchiveUri = $null
-            } | Export-Clixml -Path "$PSScriptRoot\$env:USERNAME-$env:COMPUTERNAME-PSSlack.xml" -Force -ErrorAction Stop
+                Proxy = $null
+                MapUser = $null
+                ForceVerbose = $False
+            } | Export-Clixml -Path $($script:_PSSlackXmlpath) -Force -ErrorAction Stop
         }
         Catch
         {
-            Write-Warning "Failed to create config file $PSScriptRoot\$env:USERNAME-$env:COMPUTERNAME-PSSlack.xml: $_"
+            Write-Warning "Failed to create config file $($script:_PSSlackXmlpath): $_"
         }
     }
 
@@ -57,12 +52,20 @@ Foreach($import in @($Public + $Private))
         #Import the config
         $PSSlack = $null
         $PSSlack = Get-PSSlackConfig -Source PSSlack.xml -ErrorAction Stop
-
     }
     Catch
     {
         Write-Warning "Error importing PSSlack config: $_"
     }
+
+$_PSSlackUserMap = @{}
+if($PSSlack.MapUser){
+  $_PSSlackUserMap = Get-SlackUserMap -Update
+}
+
+# Create a hashtable for use with the "leaky bucket" rate-limiting algorithm. (Some of Slack's API calls will fail if you request them too quickly.)
+# https://en.wikipedia.org/wiki/Leaky_bucket
+$Script:APIRateBuckets = @{}
 
 # Import some color defs.
 $_PSSlackColorMap = @{

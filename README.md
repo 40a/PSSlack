@@ -5,8 +5,6 @@ PSSlack
 
 This is a quick and dirty module to interact with the Slack API.
 
-This is a work in progress; it's not fully featured or tested, and there may be breaking changes.  Silly blog post pending.
-
 Pull requests and other contributions would be welcome!
 
 # Instructions
@@ -16,6 +14,8 @@ Pull requests and other contributions would be welcome!
     # Download the repository
     # Unblock the zip
     # Extract the PSSlack folder to a module path (e.g. $env:USERPROFILE\Documents\WindowsPowerShell\Modules\)
+# Or, with PowerShell 5 or later or PowerShellGet:
+    Install-Module PSSlack
 
 # Import the module.
     Import-Module PSSlack    #Alternatively, Import-Module \\Path\To\PSSlack
@@ -207,9 +207,9 @@ Get-PSSlackConfig
 
 Currently evaluating .NET Core / Cross-platform functionality.  The following will not work initially:
 
-* Serialization of URIs and tokens via Set-PSSlackConfig.  Use explicit parameters.
+* Serialization of URIs and tokens via Set-PSSlackConfig.  Set these values per-session if needed
 * [System.Drawing.Color]::SomeColor shortcut.  Use the provided $_PSSlackColorMap hash to simplify this.  E.g. $_PSSlackColorMap.red
 
 There are a good number of Slack functions out there, including jgigler's [PowerShell.Slack](https://github.com/jgigler/Powershell.Slack) and Steven Murawski's [Slack](https://github.com/smurawski/Slack).  We borrowed some ideas and code from these - thank you!
 
-If you want to go beyond interacting with the Slack API, you might consider using a bot.  Matt Hodgkins has a [fantastic post](https://hodgkins.io/chatops-on-windows-with-hubot-and-powershell) on this topic.
+If you want to go beyond interacting with the Slack API, you might consider [using a bot](http://ramblingcookiemonster.github.io/PoshBot/#references)
